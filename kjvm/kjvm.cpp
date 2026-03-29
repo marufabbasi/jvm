@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <filesystem>
 
 #include "kjvm.h"
 #include "JavaClass.h"
@@ -11,6 +12,8 @@
 #include "constants.h"
 #include "ExecutionEngine.h"
 #include "ObjectHeap.h"
+
+bool g_debug = false;
 
 JavaClass *LoadClass(std::string strClassPath)
 {
@@ -34,7 +37,8 @@ int Execute(std::string strClass)
 	pClass1 = new JavaClass();
 	pClass2 = new JavaClass();
 
-	heap.AddClassRoot("/home/boltu/workspaces/jvm/kjvm/lib");
+	const auto exeDir = std::filesystem::canonical("/proc/self/exe").parent_path();
+	heap.AddClassRoot((exeDir / "../lib").lexically_normal().string());
 	bool bRet = heap.LoadClass(strClass, pClass1);
 	bRet = heap.LoadClass("java/lang/Object", pClass2);
 
@@ -69,12 +73,26 @@ int Execute(std::string strClass)
 
 int main(int argc, char *argv[])
 {
-	if (argc < 2)
+	std::string className;
+	for (int i = 1; i < argc; i++)
+	{
+		std::string arg = argv[i];
+		if (arg == "--debug")
+		{
+			g_debug = true;
+		}
+		else if (className.empty())
+		{
+			className = arg;
+		}
+	}
+
+	if (className.empty())
 	{
 		return -1;
 	}
 
-	return Execute(argv[1]);
+	return Execute(className);
 }
 
 void Test2()
@@ -102,7 +120,7 @@ void Test2()
 		int ni = getu2((char *)(&p[1]));
 		pClass3->GetStringFromConstPool(ni, name);
 
-		printf("Loading Interface %s\n", name);
+			printf("Loading Interface %s\n", name.c_str());
 		JavaClass *pClass4 = new JavaClass();
 		bRet = heap.LoadClass(name.c_str(), pClass4);
 

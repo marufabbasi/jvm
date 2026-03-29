@@ -1,6 +1,7 @@
 #include "ClassHeap.h"
 #include "JavaClass.h"
 #include "FilePathManager.h"
+#include "kjvm.h"
 ClassHeap::ClassHeap(void)
 {
 	pFilePathManager = new FilePathManager();
@@ -47,17 +48,19 @@ JavaClass *ClassHeap::GetClass(std::string strClassName)
 bool ClassHeap::LoadClass(std::string strClassName, JavaClass *pClass)
 {
 	std::string path, relPath;
-	if (!pClass)
-	{
-		std::cout << "Must pass a class object" << std::endl;
-		return false;
-	}
+		if (!pClass)
+		{
+			if (g_debug)
+				std::cout << "Must pass a class object" << std::endl;
+			return false;
+		}
 
 	relPath = strClassName + ".class";
 
 	if (!pFilePathManager->GetAbsolutePath(relPath, path, classRoots_))
 	{
-		std::cout << "File not found " << path << std::endl;
+		if (g_debug)
+			std::cout << "File not found " << path << std::endl;
 		return false;
 	}
 

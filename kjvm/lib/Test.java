@@ -11,14 +11,16 @@ public class Test implements ITest, ITest2, ITest3, ITest4
 	}
 	public native void Print(String p);
 	public int Entry()
-	{		
-		//long i=10L;
-		//name = "This is a test print from java class\n";
-		String hello = "hello";
-		String name = " StringBuilder Test " + hello;		
-		Print(name);
-		Print(name + "Hello world\n");
-		return 2;
+	{
+		Print("Plain text from Test.Entry()\n");
+		String left = "String concat: ";
+		String right = "Hello JVM";
+		StringBuilder sb = new StringBuilder();
+		sb.append(left);
+		sb.append(right);
+		sb.append("\n");
+		Print(sb.toString());
+		return 0;
 	}
 	public int add(int a, int b)
 	{

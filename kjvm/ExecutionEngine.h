@@ -9,7 +9,7 @@ public:
 	virtual ~ExecutionEngine(void);
 	virtual u4 Execute(Frame* pFrameStack);
 	void ExecuteInvokeSpecial(Frame* pFrameStack);
-	Variable LoadConstant(JavaClass *pClass, u1 nIndex);
+	Variable LoadConstant(JavaClass *pClass, u2 nIndex);
 
 	ClassHeap *pClassHeap;
 	ObjectHeap *pObjectHeap;
@@ -17,6 +17,8 @@ public:
 	Variable CreateObject(JavaClass *pClass);
 	void PutField(Frame* pFrameStack);
 	void GetField(Frame* pFrame);
+	void PutStatic(Frame* pFrameStack);
+	void GetStatic(Frame* pFrame);
 
 	void ExecuteInvokeDynamic(Frame *pFrameStack);
 	void ExecuteInvokeVirtual(Frame* pFrameStack, u2 type);

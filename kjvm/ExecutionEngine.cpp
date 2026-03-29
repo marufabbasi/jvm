@@ -1,17 +1,45 @@
 #include <string.h>
 #include <assert.h>
+#include <iostream>
+#include <vector>
 
 #include "ExecutionEngine.h"
 #include "JavaClass.h"
 #include "types.h"
-#include "opcodes.h"
 #include "ClassHeap.h"
 #include "ObjectHeap.h"
 #include "NativeMethods.h"
+#include "kjvm.h"
 
 #include "opcodes.h"
 
 void ShowClassInfo(JavaClass *pClass);
+
+static bool MethodReturnsVoid(const std::string &desc) {
+    std::string::size_type closeParen = desc.find(')');
+    return closeParen != std::string::npos && closeParen + 1 < desc.size() && desc[closeParen + 1] == 'V';
+}
+
+struct StaticFieldValue {
+    std::string key;
+    Variable value;
+};
+
+static std::vector<StaticFieldValue> s_StaticFields;
+
+static std::string GetStaticFieldKey(const std::string &className, const std::string &fieldName, const std::string &desc) {
+    return className + "@" + fieldName + desc;
+}
+
+static Variable *FindStaticField(const std::string &key) {
+    for (u4 i = 0; i < s_StaticFields.size(); i++) {
+        if (!s_StaticFields[i].key.compare(key)) {
+            return &s_StaticFields[i].value;
+        }
+    }
+
+    return NULL;
+}
 
 Variable *Frame::pOpStack; //static
 Frame *Frame::pBaseFrame;
@@ -29,18 +57,18 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
     Frame *pFrame = &pFrameStack[0];
     assert(pFrame);
 
-#ifdef DBG_PRINT
-    printf("Current Frame %ld Stack start at %ld\n", pFrame - Frame::pBaseFrame, pFrame->stack - Frame::pOpStack);
-#endif
+    if (g_debug) {
+        printf("Current Frame %ld Stack start at %ld\n", pFrame - Frame::pBaseFrame, pFrame->stack - Frame::pOpStack);
+    }
 
     if (pFrame->pMethod->access_flags & ACC_NATIVE) {
-#ifdef DBG_PRINT
-        printf("Enter Native Method\n");
-#endif
+        if (g_debug) {
+            printf("Enter Native Method\n");
+        }
         ExecuteNativeMethod(pFrame);
-#ifdef DBG_PRINT
-        printf("Exit Native Method\n");
-#endif
+        if (g_debug) {
+            printf("Exit Native Method\n");
+        }
         return 0;
     }
 
@@ -50,21 +78,21 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
     JavaClass *pClass = pFrame->pClass;
     std::string strMethod;
     pClass->GetStringFromConstPool(pFrame->pMethod->name_index, strMethod);
-#ifdef DBG_PRINT
-    printf("Execute At Class %s Method %s \n", pClass->GetName().c_str(), strMethod.c_str());
-#endif
+    if (g_debug) {
+        printf("Execute At Class %s Method %s \n", pClass->GetName().c_str(), strMethod.c_str());
+    }
     i4 index = 0;
     i8 longVal;
     while (1) {
-#ifdef DBG_PRINT
-        printf("Stack values ");
-        for (int i = 0; i < pFrame->sp + pFrame->stack - Frame::pOpStack + 1; i++) {
-            printf("[%d] ", Frame::pOpStack[i].intValue);
-        }
-        printf("\n");
+        if (g_debug) {
+            printf("Stack values ");
+            for (int i = 0; i < pFrame->sp + pFrame->stack - Frame::pOpStack + 1; i++) {
+                printf("[%d] ", Frame::pOpStack[i].intValue);
+            }
+            printf("\n");
 
-        std::cout << "PC: " << (int) bc[pFrame->pc] << " " << OpcodeDesc[bc[pFrame->pc]] << std::endl;
-#endif
+            std::cout << "PC: " << (int) bc[pFrame->pc] << " " << OpcodeDesc[bc[pFrame->pc]] << std::endl;
+        }
         //printf("Opcode = %s [%d] Stack=%d [+%d]\n", OpcodeDesc[(u1)bc[pFrame->pc]], (u1)bc[pFrame->pc], pFrame->sp, pFrame->stack - Frame::pOpStack);
         switch (bc[pFrame->pc]) {
             case nop:
@@ -115,6 +143,10 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
                 pFrame->stack[++pFrame->sp] = LoadConstant(pFrame->pClass, (u1) bc[pFrame->pc + 1]);
                 pFrame->pc += 2;
                 break;
+            case ldc_w: //19
+                pFrame->stack[++pFrame->sp] = LoadConstant(pFrame->pClass, getu2(&bc[pFrame->pc + 1]));
+                pFrame->pc += 3;
+                break;
 
             case ldc2_w: // 20 /*(0x14)*/
                 index = getu2(&bc[pFrame->pc + 1]);
@@ -148,6 +180,11 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
 
             case lload: // 22 /*(0x16)*/
 
+                break;
+            case fload: // 23 /*(0x17)*/
+                pFrame->sp++;
+                pFrame->stack[pFrame->sp] = pFrame->stack[(u1) bc[pFrame->pc + 1]];
+                pFrame->pc += 2;
                 break;
             case lload_0: // 30 /*(0x1e) */
             case lload_1: // 31 /*(0x1f) */
@@ -203,6 +240,10 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
                 pFrame->stack[(u1) bc[pFrame->pc + 1]] = pFrame->stack[pFrame->sp--];
                 pFrame->pc += 2;
                 break;
+            case fstore: // 56 /*(0x38)*/
+                pFrame->stack[(u1) bc[pFrame->pc + 1]] = pFrame->stack[pFrame->sp--];
+                pFrame->pc += 2;
+                break;
             case istore_0: // 59 /*(0x3b)*/
             case istore_1: // 60 /*(0x3c) */
             case istore_2: // 61 /*(0x3d) */
@@ -246,6 +287,11 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
 
                 //Generic (typeless) stack operations
 
+            case pop: // 87 /*(0x57)*/
+                pFrame->sp--;
+                pFrame->pc++;
+                break;
+
             case dup: // 89 /*(0x59)*/
                 pFrame->stack[pFrame->sp + 1] = pFrame->stack[pFrame->sp];
                 pFrame->sp++;
@@ -260,6 +306,12 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
                 break;
             case dup_x2: // 91 /*(0x5b)*/
                 error = 1;
+                break;
+            case swap: //95
+                pFrame->stack[pFrame->sp + 1] = pFrame->stack[pFrame->sp];
+                pFrame->stack[pFrame->sp] = pFrame->stack[pFrame->sp - 1];
+                pFrame->stack[pFrame->sp - 1] = pFrame->stack[pFrame->sp + 1];
+                pFrame->pc++;
                 break;
 
                 //Type Conversion
@@ -294,10 +346,74 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
                 pFrame->sp--;
                 pFrame->pc++;
                 break;
+            case idiv: //108
+                pFrame->stack[pFrame->sp - 1].intValue =
+                        pFrame->stack[pFrame->sp - 1].intValue / pFrame->stack[pFrame->sp].intValue;
+                pFrame->sp--;
+                pFrame->pc++;
+                break;
+            case irem: //112
+                pFrame->stack[pFrame->sp - 1].intValue =
+                        pFrame->stack[pFrame->sp - 1].intValue % pFrame->stack[pFrame->sp].intValue;
+                pFrame->sp--;
+                pFrame->pc++;
+                break;
+            case ineg: //116
+                pFrame->stack[pFrame->sp].intValue = -((i4) pFrame->stack[pFrame->sp].intValue);
+                pFrame->pc++;
+                break;
+            case ishl: //120
+                pFrame->stack[pFrame->sp - 1].intValue =
+                        ((i4) pFrame->stack[pFrame->sp - 1].intValue) << (pFrame->stack[pFrame->sp].intValue & 0x1F);
+                pFrame->sp--;
+                pFrame->pc++;
+                break;
+            case ishr: //122
+                pFrame->stack[pFrame->sp - 1].intValue =
+                        ((i4) pFrame->stack[pFrame->sp - 1].intValue) >> (pFrame->stack[pFrame->sp].intValue & 0x1F);
+                pFrame->sp--;
+                pFrame->pc++;
+                break;
+            case iushr: //124
+                pFrame->stack[pFrame->sp - 1].intValue =
+                        ((u4) pFrame->stack[pFrame->sp - 1].intValue) >> (pFrame->stack[pFrame->sp].intValue & 0x1F);
+                pFrame->sp--;
+                pFrame->pc++;
+                break;
+            case iand: //126
+                pFrame->stack[pFrame->sp - 1].intValue =
+                        pFrame->stack[pFrame->sp - 1].intValue & pFrame->stack[pFrame->sp].intValue;
+                pFrame->sp--;
+                pFrame->pc++;
+                break;
+            case ior: //128
+                pFrame->stack[pFrame->sp - 1].intValue =
+                        pFrame->stack[pFrame->sp - 1].intValue | pFrame->stack[pFrame->sp].intValue;
+                pFrame->sp--;
+                pFrame->pc++;
+                break;
+            case ixor: //130
+                pFrame->stack[pFrame->sp - 1].intValue =
+                        pFrame->stack[pFrame->sp - 1].intValue ^ pFrame->stack[pFrame->sp].intValue;
+                pFrame->sp--;
+                pFrame->pc++;
+                break;
 
             case iinc: // 132 /*(0x84)*/ Increment local variable by constant
                 pFrame->stack[(u1) bc[pFrame->pc + 1]].intValue += (char) bc[pFrame->pc + 2];
                 pFrame->pc += 3;
+                break;
+            case i2b: //145
+                pFrame->stack[pFrame->sp].intValue = (char) pFrame->stack[pFrame->sp].intValue;
+                pFrame->pc++;
+                break;
+            case i2c: //146
+                pFrame->stack[pFrame->sp].intValue = (u2) pFrame->stack[pFrame->sp].intValue;
+                pFrame->pc++;
+                break;
+            case i2s: //147
+                pFrame->stack[pFrame->sp].intValue = (i2) pFrame->stack[pFrame->sp].intValue;
+                pFrame->pc++;
                 break;
                 ////////////////////// Logic ///////////////////
 
@@ -323,6 +439,16 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
 
             case getfield: //180 (0xb4) Fetch field from object
                 GetField(pFrame);
+                pFrame->pc += 3;
+                break;
+            case getstatic: //178
+                pFrame->sp++;
+                GetStatic(pFrame);
+                pFrame->pc += 3;
+                break;
+            case putstatic: //179
+                PutStatic(pFrame);
+                pFrame->sp--;
                 pFrame->pc += 3;
                 break;
 
@@ -438,6 +564,22 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
                 }
                 pFrame->sp--;
                 break;
+            case ifnull: //198
+                if (pFrame->stack[pFrame->sp].object.heapPtr == 0) {
+                    pFrame->pc += geti2(&bc[pFrame->pc + 1]);
+                } else {
+                    pFrame->pc += 3;
+                }
+                pFrame->sp--;
+                break;
+            case ifnonnull: //199
+                if (pFrame->stack[pFrame->sp].object.heapPtr != 0) {
+                    pFrame->pc += geti2(&bc[pFrame->pc + 1]);
+                } else {
+                    pFrame->pc += 3;
+                }
+                pFrame->sp--;
+                break;
                 //Comparison instructions
 
                 //Unconditional branch instructions
@@ -475,17 +617,25 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
                 break;
                 //Method return instructions
             case ireturn: //172 (0xac)
-#ifdef DBG_PRINT
-                printf("----IRETURN------\n");
-#endif
+                if (g_debug) {
+                    printf("----IRETURN------\n");
+                }
                 pFrame->stack[0].intValue = pFrame->stack[pFrame->sp].intValue;
                 return ireturn;
                 break;
 
+            case areturn: //176 (0xb0)
+                if (g_debug) {
+                    printf("----ARETURN------\n");
+                }
+                pFrame->stack[0] = pFrame->stack[pFrame->sp];
+                return areturn;
+                break;
+
             case _return: //177 (0xb1): Return (void) from method
-#ifdef DBG_PRINT
-                printf("----RETURN------\n");
-#endif
+                if (g_debug) {
+                    printf("----RETURN------\n");
+                }
                 return 0; //METHOD_RETURN;
                 break;
                 //////////////// Thread Synchronization ////////////////////
@@ -496,9 +646,9 @@ u4 ExecutionEngine::Execute(Frame *pFrameStack) {
                 break;
 
             default:
-#ifdef DBG_PRINT
-                std::cout << "Instruction " << (u4) bc[pFrame->pc] << " has not been implemented" << std::endl;
-#endif
+                if (g_debug) {
+                    std::cout << "Instruction " << (u4) bc[pFrame->pc] << " has not been implemented" << std::endl;
+                }
                 error = 1;
                 break;
         }
@@ -516,7 +666,7 @@ void ExecutionEngine::ExecuteInvokeSpecial(Frame *pFrameStack) {
     ExecuteInvokeVirtual(pFrameStack, invokespecial);
 }
 
-Variable ExecutionEngine::LoadConstant(JavaClass *pClass, u1 nIndex) {
+Variable ExecutionEngine::LoadConstant(JavaClass *pClass, u2 nIndex) {
     Variable v;
     v.ptrValue = 0;
     std::string *pStrVal = NULL, strTemp;
@@ -578,6 +728,77 @@ void ExecutionEngine::GetField(Frame *pFrame) {
     pFrame->stack[pFrame->sp] = pVarList[nIndex + 1];
 }
 
+void ExecutionEngine::PutStatic(Frame *pFrameStack) {
+    u2 cpIndex = getu2(&pFrameStack[0].pMethod->pCode_attr->code[pFrameStack[0].pc + 1]);
+    char *fieldRef = (char *) pFrameStack[0].pClass->constant_pool[cpIndex];
+    assert(fieldRef[0] == CONSTANT_Fieldref);
+
+    u2 classIndex = getu2(&fieldRef[1]);
+    u2 nameAndTypeIndex = getu2(&fieldRef[3]);
+
+    char *cls = (char *) pFrameStack[0].pClass->constant_pool[classIndex];
+    assert(cls[0] == CONSTANT_Class);
+    u2 classNameIndex = getu2(&cls[1]);
+
+    std::string className;
+    pFrameStack[0].pClass->GetStringFromConstPool(classNameIndex, className);
+
+    char *nameType = (char *) pFrameStack[0].pClass->constant_pool[nameAndTypeIndex];
+    assert(nameType[0] == CONSTANT_NameAndType);
+
+    u2 nameIndex = getu2(&nameType[1]);
+    u2 descIndex = getu2(&nameType[3]);
+
+    std::string fieldName, fieldDesc;
+    pFrameStack[0].pClass->GetStringFromConstPool(nameIndex, fieldName);
+    pFrameStack[0].pClass->GetStringFromConstPool(descIndex, fieldDesc);
+
+    std::string key = GetStaticFieldKey(className, fieldName, fieldDesc);
+    Variable *pField = FindStaticField(key);
+    if (pField == NULL) {
+        StaticFieldValue val;
+        val.key = key;
+        val.value = pFrameStack[0].stack[pFrameStack[0].sp];
+        s_StaticFields.push_back(val);
+    } else {
+        *pField = pFrameStack[0].stack[pFrameStack[0].sp];
+    }
+}
+
+void ExecutionEngine::GetStatic(Frame *pFrame) {
+    u2 cpIndex = getu2(&pFrame->pMethod->pCode_attr->code[pFrame->pc + 1]);
+    char *fieldRef = (char *) pFrame->pClass->constant_pool[cpIndex];
+    assert(fieldRef[0] == CONSTANT_Fieldref);
+
+    u2 classIndex = getu2(&fieldRef[1]);
+    u2 nameAndTypeIndex = getu2(&fieldRef[3]);
+
+    char *cls = (char *) pFrame->pClass->constant_pool[classIndex];
+    assert(cls[0] == CONSTANT_Class);
+    u2 classNameIndex = getu2(&cls[1]);
+
+    std::string className;
+    pFrame->pClass->GetStringFromConstPool(classNameIndex, className);
+
+    char *nameType = (char *) pFrame->pClass->constant_pool[nameAndTypeIndex];
+    assert(nameType[0] == CONSTANT_NameAndType);
+
+    u2 nameIndex = getu2(&nameType[1]);
+    u2 descIndex = getu2(&nameType[3]);
+
+    std::string fieldName, fieldDesc;
+    pFrame->pClass->GetStringFromConstPool(nameIndex, fieldName);
+    pFrame->pClass->GetStringFromConstPool(descIndex, fieldDesc);
+
+    std::string key = GetStaticFieldKey(className, fieldName, fieldDesc);
+    Variable *pField = FindStaticField(key);
+    if (pField == NULL) {
+        memset(&pFrame->stack[pFrame->sp], 0, sizeof(Variable));
+    } else {
+        pFrame->stack[pFrame->sp] = *pField;
+    }
+}
+
 std::tuple<std::string, std::string> GetNameAndTypeInfo(Frame *pFrameStack, CONSTANT_NameAndType_info *nameAndType) {
     assert(pFrameStack && nameAndType && nameAndType->tag == CONSTANT_NameAndType);
     u1 *nt = (u1 *) nameAndType;
@@ -606,7 +827,9 @@ std::string GetStringFromStringIndex(Frame *pFrameStack, u2 string_index) {
     assert(pFrameStack[0].pClass->constant_pool[name_index]->tag == CONSTANT_Utf8);
 
     pFrameStack[0].pClass->GetStringFromConstPool(name_index, name);
-    std::cout << "String: " << name << std::endl;
+    if (g_debug) {
+        std::cout << "String: " << name << std::endl;
+    }
     //assert(name[0] == '\001');
     //assert(name[21] == '\001');
 
@@ -665,8 +888,10 @@ void ExecutionEngine::ExecuteInvokeDynamic(Frame *pFrameStack) {
     auto handle_ref_kind = nmh[1];
     auto handle_ref_index = getu2(&nmh[2]);
 
-    std::cout << "Ref Kind: " << (int) handle_ref_kind << std::endl;
-    std::cout << "Ref Index: " << handle_ref_index << std::endl;
+    if (g_debug) {
+        std::cout << "Ref Kind: " << (int) handle_ref_kind << std::endl;
+        std::cout << "Ref Index: " << handle_ref_index << std::endl;
+    }
 
     assert(handle_ref_kind == REF_invokeStatic);
 
@@ -683,7 +908,9 @@ void ExecutionEngine::ExecuteInvokeDynamic(Frame *pFrameStack) {
     u2 handle_name_index = getu2(&((char *) handle_method_class)[1]);
     std::string dyn_name;
     pFrameStack[0].pClass->GetStringFromConstPool(handle_name_index, dyn_name);
-    std::cout << dyn_name << std::endl;
+    if (g_debug) {
+        std::cout << dyn_name << std::endl;
+    }
 
     JavaClass *pDyn_Class = new JavaClass();
 
@@ -704,10 +931,12 @@ void ExecutionEngine::ExecuteInvokeDynamic(Frame *pFrameStack) {
     std::string dyn_fn, dyn_type;
     tie(dyn_fn, dyn_type) = GetNameAndTypeInfo(pFrameStack, (CONSTANT_NameAndType_info *) handle_method_name_type);
 
-    std::cout << "Name and type: " << dyn_fn << "->" << dyn_type << std::endl;
-    std::cout << "Bootstrap argument 0 index: " << bootstrap_method->bootstrap_arguments[0]
-              << "Tag: " << (int) pFrameStack[0].pClass->constant_pool[bootstrap_method->bootstrap_arguments[0]]->tag
-              << std::endl;
+    if (g_debug) {
+        std::cout << "Name and type: " << dyn_fn << "->" << dyn_type << std::endl;
+        std::cout << "Bootstrap argument 0 index: " << bootstrap_method->bootstrap_arguments[0]
+                  << "Tag: " << (int) pFrameStack[0].pClass->constant_pool[bootstrap_method->bootstrap_arguments[0]]->tag
+                  << std::endl;
+    }
 
     // argument
     std::string bootstrap_arg = GetStringFromStringIndex(pFrameStack, bootstrap_method->bootstrap_arguments[0]);
@@ -724,7 +953,9 @@ void ExecutionEngine::ExecuteInvokeDynamic(Frame *pFrameStack) {
 
     //if(!method_name.compare("makeConcatWithConstants") && !desc.compare("(Ljava/lang/String;J)Ljava/lang/String;"))
     {
-        std::cout << method_name << desc << std::endl;
+        if (g_debug) {
+            std::cout << method_name << desc << std::endl;
+        }
     }
 
     method_info_ex method;
@@ -761,14 +992,16 @@ void ExecutionEngine::ExecuteInvokeDynamic(Frame *pFrameStack) {
     }
 
     int nDiscardStack = params;
-    if (pFrameStack[1].pMethod->access_flags & ACC_NATIVE) {
-        std::cout << "Will execute native method" << std::endl;
-    } else {
-        nDiscardStack += pFrameStack[1].pMethod->pCode_attr->max_locals;
-    }
 
     pFrameStack[1].stack = &Frame::pOpStack[pFrameStack->stack - Frame::pOpStack + pFrameStack[0].sp - params + 1];
-    pFrameStack[1].sp = nDiscardStack - 1;
+    if (pFrameStack[1].pMethod->access_flags & ACC_NATIVE) {
+        if (g_debug) {
+            std::cout << "Will execute native method" << std::endl;
+        }
+        pFrameStack[1].sp = params - 1;
+    } else {
+        pFrameStack[1].sp = pFrameStack[1].pMethod->pCode_attr->max_locals - 1;
+    }
 
     this->Execute(&pFrameStack[1]);
 
@@ -788,7 +1021,6 @@ void ExecutionEngine::ExecuteInvokeDynamic(Frame *pFrameStack) {
 
 void ExecutionEngine::ExecuteInvokeVirtual(Frame *pFrameStack, u2 type) {
     u2 mi = getu2(&pFrameStack[0].pMethod->pCode_attr->code[pFrameStack[0].pc + 1]);
-    Variable objectRef = pFrameStack[0].stack[pFrameStack[0].sp];
     char *pConstPool = (char *) pFrameStack[0].pClass->constant_pool[mi];
 
     assert(pConstPool[0] == CONSTANT_Methodref);
@@ -825,48 +1057,48 @@ void ExecutionEngine::ExecuteInvokeVirtual(Frame *pFrameStack, u2 type) {
     pFrameStack[0].pClass->GetStringFromConstPool(method.name_index, strName);
     pFrameStack[0].pClass->GetStringFromConstPool(method.descriptor_index, strDesc);
 
-    //printf("SuperClass - %s",(method.access_flags& ACC_SUPER)?"Yes":"No");
+    int params = GetMethodParametersStackCount(strDesc) + 1;
+    if (type == invokestatic) {
+        params--;
+    }
+
+    // invokevirtual dispatches on the runtime receiver type.
     JavaClass *pVirtualClass = pClass;
-    int nIndex = pClass->GetMethodIndex(strName, strDesc, pVirtualClass);
+    if (type == invokevirtual && params > 0) {
+        int receiverStackIndex = pFrameStack[0].sp - GetMethodParametersStackCount(strDesc);
+        Object receiver = pFrameStack[0].stack[receiverStackIndex].object;
+        Variable *pReceiverVars = pObjectHeap->GetObjectPointer(receiver);
+        if (pReceiverVars) {
+            pVirtualClass = (JavaClass *) pReceiverVars[0].ptrValue;
+        }
+    }
+
+    int nIndex = pVirtualClass->GetMethodIndex(strName, strDesc, pVirtualClass);
+    assert(nIndex >= 0);
 
     memset(&pFrameStack[1], 0, sizeof(pFrameStack[1]));
-    pFrameStack[1].pMethod = &pClass->methods[nIndex];
-
-    method.access_flags = getu2((char *) pFrameStack[1].pMethod);
-    if (ACC_SUPER & method.access_flags) {
-        pFrameStack[1].pClass = pVirtualClass->GetSuperClass();
-        //ShowClassInfo(pFrameStack[1].pClass);
-    } else {
-        pFrameStack[1].pClass = pVirtualClass;
-    }
-
-    //pFrameStack[1].pOpStack[++pFrameStack[1].sp]=pFrameStack[0].pOpStack[pFrameStack[0].sp--];
-    int params = GetMethodParametersStackCount(strDesc) + 1;
-
-    //static
-    if (type == invokestatic)
-        params--;
+    pFrameStack[1].pMethod = &pVirtualClass->methods[nIndex];
+    pFrameStack[1].pClass = pVirtualClass;
 
     int nDiscardStack = params;
+    pFrameStack[1].stack = &Frame::pOpStack[pFrameStack->stack - Frame::pOpStack + pFrameStack[0].sp - params + 1];
     if (pFrameStack[1].pMethod->access_flags & ACC_NATIVE) {
+        pFrameStack[1].sp = params - 1;
     } else {
-        nDiscardStack += pFrameStack[1].pMethod->pCode_attr->max_locals;
+        pFrameStack[1].sp = pFrameStack[1].pMethod->pCode_attr->max_locals - 1;
     }
 
-    pFrameStack[1].stack = &Frame::pOpStack[pFrameStack->stack - Frame::pOpStack + pFrameStack[0].sp - params + 1];
-    pFrameStack[1].sp = nDiscardStack - 1;
-
-#ifdef DBG_PRINT
-    printf("Invoking method %s%s, \n", strName.c_str(), strDesc.c_str());
-    printf("Last Frame Stack %ld Params %d Stack start at %ld\n",
-           pFrameStack[0].stack - Frame::pOpStack + pFrameStack[0].sp, pFrameStack[1].sp,
-           pFrameStack[1].stack - Frame::pOpStack);
-#endif
+    if (g_debug) {
+        printf("Invoking method %s%s, \n", strName.c_str(), strDesc.c_str());
+        printf("Last Frame Stack %ld Params %d Stack start at %ld\n",
+               pFrameStack[0].stack - Frame::pOpStack + pFrameStack[0].sp, pFrameStack[1].sp,
+               pFrameStack[1].stack - Frame::pOpStack);
+    }
 
     this->Execute(&pFrameStack[1]);
 
     //if returns then get on stack
-    if (strDesc.find(")V") < 0) {
+    if (!MethodReturnsVoid(strDesc)) {
         nDiscardStack--;
     }
 
@@ -946,6 +1178,12 @@ pNativeMethod GetNativeMethod(std::string strSign) {
         return StringBuilder_toString_String;
     } else if (!strSign.compare("Test@Print(Ljava/lang/String;)V")) {
         return Print;
+    } else if (!strSign.compare("ExtensiveTest@Print(Ljava/lang/String;)V")) {
+        return Print;
+    } else if (!strSign.compare("MvpOpsTest@Print(Ljava/lang/String;)V")) {
+        return Print;
+    } else if (strSign.find("@Print(Ljava/lang/String;)V") != std::string::npos) {
+        return Print;
     }
 
     return NULL;
@@ -961,9 +1199,9 @@ u4 ExecutionEngine::ExecuteNativeMethod(Frame *pFrameStack) {
     strClassName = pClass->GetName();
     pClass->GetStringFromConstPool(pFrame->pMethod->name_index, strMethod);
     pClass->GetStringFromConstPool(pFrame->pMethod->descriptor_index, strDesc);
-#ifdef DBG_PRINT
-    printf("Execute At Class %s Method %s%s  \n", strClassName.c_str(), strMethod.c_str(), strDesc.c_str());
-#endif
+    if (g_debug) {
+        printf("Execute At Class %s Method %s%s  \n", strClassName.c_str(), strMethod.c_str(), strDesc.c_str());
+    }
     strSignature = strClassName + "@" + strMethod + strDesc;
     pNativeMethod pNativeMethod = GetNativeMethod(strSignature);
     RuntimeEnvironment rte;
@@ -980,7 +1218,7 @@ u4 ExecutionEngine::ExecuteNativeMethod(Frame *pFrameStack) {
         Variable retVal = pNativeMethod(&rte);
 
         //if returns then get on stack
-        if (strDesc.find(")V") < 0) {
+        if (!MethodReturnsVoid(strDesc)) {
             //todo validate
             pFrame->stack[0] = retVal;
         }

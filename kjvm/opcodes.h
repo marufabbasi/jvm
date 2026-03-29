@@ -24,6 +24,7 @@ extern std::vector<std::string> OpcodeDesc;
 #define iload 21 /*(0x15)*/
 
 #define lload 22 /*(0x16)*/
+#define fload 23 /*(0x17)*/
 
 #define aload 25 /*(0x19)*/
 
@@ -52,6 +53,7 @@ extern std::vector<std::string> OpcodeDesc;
 #define aaload 50
 
 #define istore 54 /*(0x36)*/
+#define fstore 56 /*(0x38)*/
 #define astore 58 /*(0x3a)*/
 
 #define istore_0 59 /*(0x3b)*/ 
@@ -77,6 +79,7 @@ extern std::vector<std::string> OpcodeDesc;
 
 #define aastore 83 /*(0x53)*/
 
+#define pop 87 /*(0x57)*/
 #define dup 89 /*(0x59)*/
 #define dup_x1 90 /*(0x5a)*/
 #define dup_x2 91 /*(0x5b)*/
@@ -86,6 +89,7 @@ extern std::vector<std::string> OpcodeDesc;
 
 #define isub 100 /*(0x64)*/
 #define imul 104 /*(0x68)*/
+#define idiv 108 /*(0x6c)*/
 
 #define iinc 132 /*(0x84)*/
 
@@ -105,9 +109,11 @@ extern std::vector<std::string> OpcodeDesc;
 
 #define _goto 167 /*(0xa7)*/
 
-#define tableswitch 170 /* todo */
-
 #define ireturn 172 /*(0xac)*/
+#define lreturn 173 /*(0xad)*/
+#define freturn 174 /*(0xae)*/
+#define dreturn 175 /*(0xaf)*/
+#define areturn 176 /*(0xb0)*/
 #define _return 177 /*(0xb1)*/
 
 #define getfield 180 /*(0xb4)*/
@@ -116,16 +122,120 @@ extern std::vector<std::string> OpcodeDesc;
 #define invokevirtual 182 /*(0xb6)*/
 #define invokespecial  183 /*(0xb7) */
 #define invokestatic 184
-#define invokeinterface 185 /* todo */
-#define invokedynamic 186 /* todo (0xba) */
 
 #define _new 187 /*(0xbb)*/
 
 #define newarray 188 /*(0xbc)*/
 #define anewarray 189 /*(0xbd)*/
-#define arraylength 190 /* todo */
 #define athrow 191 /* (0xbf) */
 #define checkcast 192 /* (0xc0) */
 #define instanceof 193 /* (0xc1) */ 
 #define monitorenter 194 /* (0xc2) */
 #define monitorexit 195 /* (0xc3) */
+
+// Implementation in progress
+#define ldc_w 19 /*(0x13) todo */
+#define irem 112 /*(0x70) todo */
+#define ineg 116 /*(0x74) todo */
+#define ishl 120 /*(0x78) todo */
+#define ishr 122 /*(0x7a) todo */
+#define iushr 124 /*(0x7c) todo */
+#define iand 126 /*(0x7e) todo */
+#define ior 128 /*(0x80) todo */
+#define ixor 130 /*(0x82) todo */
+#define i2b 145 /*(0x91) todo */
+#define i2c 146 /*(0x92) todo */
+#define i2s 147 /*(0x93) todo */
+#define swap 95 /*(0x5f) todo */
+#define getstatic 178 /*(0xb2) todo */
+#define putstatic 179 /*(0xb3) todo */
+#define ifnull 198 /*(0xc6) todo */
+#define ifnonnull 199 /*(0xc7) todo */
+
+// Not implemented
+#define tableswitch 170 /* todo */
+#define invokeinterface 185 /* todo */
+#define invokedynamic 186 /* todo (0xba) */
+#define arraylength 190 /* todo */
+
+#define i2l 133 /*(0x85) todo */
+#define i2f 134 /*(0x86) todo */
+#define i2d 135 /*(0x87) todo */
+#define if_acmpeq 165 /*(0xa5) todo */
+#define if_acmpne 166 /*(0xa6) todo */
+#define pop2 88 /*(0x58) todo */
+#define lstore 55 /*(0x37) todo */
+#define ldiv 109 /*(0x6d) todo */
+#define lmul 105 /*(0x69) todo */
+#define lsub 101 /*(0x65) todo */
+#define lrem 113 /*(0x71) todo */
+#define lneg 117 /*(0x75) todo */
+#define land 127 /*(0x7f) todo */
+#define lor 129 /*(0x81) todo */
+#define lxor 131 /*(0x83) todo */
+#define lshl 121 /*(0x79) todo */
+#define lshr 123 /*(0x7b) todo */
+#define lushr 125 /*(0x7d) todo */
+#define lcmp 148 /*(0x94) todo */
+#define laload 47 /*(0x2f) todo */
+#define lastore 80 /*(0x50) todo */
+#define l2i 136 /*(0x88) todo */
+#define l2f 137 /*(0x89) todo */
+#define l2d 138 /*(0x8a) todo */
+#define fconst_0 11 /*(0x0b) todo */
+#define fconst_1 12 /*(0x0c) todo */
+#define fconst_2 13 /*(0x0d) todo */
+#define fadd 98 /*(0x62) todo */
+#define fsub 102 /*(0x66) todo */
+#define fmul 106 /*(0x6a) todo */
+#define fdiv 110 /*(0x6e) todo */
+#define frem 114 /*(0x72) todo */
+#define fneg 118 /*(0x76) todo */
+#define faload 48 /*(0x30) todo */
+#define fastore 81 /*(0x51) todo */
+#define fcmpg 150 /*(0x96) todo */
+#define fcmpl 149 /*(0x95) todo */
+#define f2i 139 /*(0x8b) todo */
+#define f2l 140 /*(0x8c) todo */
+#define f2d 141 /*(0x8d) todo */
+#define dconst_0 14 /*(0x0e) todo */
+#define dconst_1 15 /*(0x0f) todo */
+#define dadd 99 /*(0x63) todo */
+#define dsub 103 /*(0x67) todo */
+#define dmul 107 /*(0x6b) todo */
+#define ddiv 111 /*(0x6f) todo */
+#define drem 115 /*(0x73) todo */
+#define dneg 119 /*(0x77) todo */
+#define daload 49 /*(0x31) todo */
+#define dastore 82 /*(0x52) todo */
+#define dcmpg 152 /*(0x98) todo */
+#define dcmpl 151 /*(0x97) todo */
+#define dload 24 /*(0x18) todo */
+#define dload_0 38 /*(0x26) todo */
+#define dload_1 39 /*(0x27) todo */
+#define dload_2 40 /*(0x28) todo */
+#define dload_3 41 /*(0x29) todo */
+#define dstore 57 /*(0x39) todo */
+#define dstore_0 71 /*(0x47) todo */
+#define dstore_1 72 /*(0x48) todo */
+#define dstore_2 73 /*(0x49) todo */
+#define dstore_3 74 /*(0x4a) todo */
+#define d2i 142 /*(0x8e) todo */
+#define d2l 143 /*(0x8f) todo */
+#define d2f 144 /*(0x90) todo */
+#define lookupswitch 171 /*(0xab) todo */
+#define wide 196 /*(0xc4) todo */
+#define multianewarray 197 /*(0xc5) todo */
+#define ret 169 /*(0xa9) todo */
+#define jsr 168 /*(0xa8) todo */
+#define jsr_w 201 /*(0xc9) todo */
+#define goto_w 200 /*(0xc8) todo */
+#define baload 51 /*(0x33) todo */
+#define bastore 84 /*(0x54) todo */
+#define caload 52 /*(0x34) todo */
+#define castore 85 /*(0x55) todo */
+#define saload 53 /*(0x35) todo */
+#define sastore 86 /*(0x56) todo */
+#define dup2 92 /*(0x5c) todo */
+#define dup2_x1 93 /*(0x5d) todo */
+#define dup2_x2 94 /*(0x5e) todo */

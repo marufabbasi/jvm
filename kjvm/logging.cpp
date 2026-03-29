@@ -20,7 +20,7 @@ void ShowClassInfo(JavaClass *pClass)
 	name = pClass->GetSuperClassName();
 	printf("Super Class Name = [%s]\n", name.c_str());
 
-	printf("Object Size = [%lu]\n", pClass->GetObjectSize());
+	printf("Object Size = [%u]\n", pClass->GetObjectSize());
 
 	for (int i = 1; i < pClass->constant_pool_count - 1; i++)
 	{
@@ -38,14 +38,14 @@ void ShowClassInfo(JavaClass *pClass)
 	    std::cout << "Access flags: " << pClass->methods[i].access_flags << std::endl;
 		if (pClass->methods[i].pCode_attr != NULL)
 		{
-			printf("ode Length= %d\n", pClass->methods[i].pCode_attr->code_length);
+			printf("Code Length= %d\n", pClass->methods[i].pCode_attr->code_length);
 			printf("Max stack = %d, Max Locals = %d, Exception table length= %d\nCODE\n", pClass->methods[i].pCode_attr->max_stack, pClass->methods[i].pCode_attr->max_locals, pClass->methods[i].pCode_attr->exception_table_length);
 
 			for (u4 j = 0; j < pClass->methods[i].pCode_attr->code_length; j++)
 				printf("%d ", pClass->methods[i].pCode_attr->code[j]);
 			printf("\nENDCODE\n");
 		}
-		else if (pClass->methods[i].access_flags && ACC_NATIVE)
+		else if (pClass->methods[i].access_flags & ACC_NATIVE)
 		{
 			printf("Method %d is native\n", i);
 		}
@@ -57,7 +57,7 @@ void ShowClassInfo(JavaClass *pClass)
 
 		pClass->GetStringFromConstPool(pClass->fields[i].name_index, name);
 		pClass->GetStringFromConstPool(pClass->fields[i].descriptor_index, desc);
-		printf("Filed %d: Name: %s Type: %s\n", i, name, desc);
+		printf("Field %d: Name: %s Type: %s\n", i, name.c_str(), desc.c_str());
 	}
 
 	for (int i = 0; i < pClass->interfaces_count; i++)
@@ -70,6 +70,6 @@ void ShowClassInfo(JavaClass *pClass)
 		int ni = getu2((char *)(&p[1]));
 		pClass->GetStringFromConstPool(ni, name);
 
-		printf("Interface %d: Name %s\n", i, name);
+		printf("Interface %d: Name %s\n", i, name.c_str());
 	}
 }

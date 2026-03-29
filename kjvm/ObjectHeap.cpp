@@ -24,7 +24,7 @@ Object ObjectHeap::CreateObject(JavaClass* pClass)
 	Variable *obj = new Variable[osize];
 	if(!obj) return object;
 	memset(obj, 0, sizeof(Variable)*osize);
-	object.heapPtr=(void *)m_nNextObjectID++;
+	object.heapPtr=(void *)(uintptr_t)m_nNextObjectID++;
 	obj[0].ptrValue =(void*) pClass;
 
 	m_ObjectMap[(void *)object.heapPtr]=obj;
@@ -65,7 +65,7 @@ bool ObjectHeap::CreateObjectArray(JavaClass* pClass, u4 count, Object& object)
 	else
 		return false;
 
-	object.heapPtr=(void*)m_nNextObjectID++;
+	object.heapPtr=(void*)(uintptr_t)m_nNextObjectID++;
 	
 	m_ObjectMap[(void *)object.heapPtr]=pVar;
 
@@ -92,7 +92,7 @@ Object ObjectHeap::CreateNewArray(u1 type, i4 count)
 	if(obj)
 	{
 		memset(obj, 0, sizeof(Variable)*(count+1));
-		object.heapPtr=(void *)m_nNextObjectID++;
+			object.heapPtr=(void *)(uintptr_t)m_nNextObjectID++;
 		obj[0].intValue = type;
 
 		m_ObjectMap[(void *)object.heapPtr] = obj;

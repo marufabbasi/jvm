@@ -10,6 +10,7 @@
 #include "JavaClass.h"
 #include "ClassHeap.h"
 #include "ObjectHeap.h"
+#include "kjvm.h"
 
 JavaClass::JavaClass(void) : m_pClassHeap(NULL),
 							 m_pByteCode(NULL),
@@ -27,13 +28,17 @@ JavaClass::~JavaClass(void)
 
 bool JavaClass::LoadClassFromFile(std::string lpszFilePath)
 {
-	size_t lenRead, len;
-
 	std::ifstream file(lpszFilePath.c_str(), std::ios::binary | std::ios::ate);
+	if (!file)
+		return false;
+
 	std::streamsize size = file.tellg();
+	if (size <= 0)
+		return false;
+
 	file.seekg(0, std::ios::beg);
 
-	byteCode_.reserve(size + 1);
+	byteCode_.resize(static_cast<size_t>(size));
 	if (file.read((char *)byteCode_.data(), size))
 	{
 		m_nByteCodeLength = size;
@@ -117,12 +122,12 @@ bool JavaClass::ParseClass(void)
 		ParseAttributes(p);
 	}
 
-	return 0;
+	return true;
 }
 
 bool JavaClass::ParseAttributes(char *&p)
 {
-	attributes.reserve(attributes_count);
+	attributes.resize(attributes_count);
 
 	// TODO: P.3: Express intent (use gsl::index)
 	for (int i = 0; i < attributes_count; i++)
@@ -157,7 +162,9 @@ bool JavaClass::ParseClassBootstrapMethodsAttribute()
 		GetStringFromConstPool(name_index, strAttributeName);		
 		if (!strAttributeName.compare("BootstrapMethods"))
 		{			
-			std::cout << "Found BootstrapMethods" << std::endl;
+			if (g_debug) {
+				std::cout << "Found BootstrapMethods" << std::endl;
+			}
 			pBootstrapMethods_attribute_ = new BootstrapMethods_attribute();
 
 			pBootstrapMethods_attribute_->attribute_name_index = name_index;
@@ -166,8 +173,10 @@ bool JavaClass::ParseClassBootstrapMethodsAttribute()
 			p += 2;
 			pBootstrapMethods_attribute_->num_bootstrap_methods = num_bootstrap_methods;
 
-			std::cout << "num_bootstrap_methods " << num_bootstrap_methods << std::endl;
-			pBootstrapMethods_attribute_->bootstrap_methods_.reserve(num_bootstrap_methods);
+			if (g_debug) {
+				std::cout << "num_bootstrap_methods " << num_bootstrap_methods << std::endl;
+			}
+				pBootstrapMethods_attribute_->bootstrap_methods_.resize(num_bootstrap_methods);
 
 			for(int m=0; m<num_bootstrap_methods; m++) 
 			{
@@ -185,7 +194,9 @@ bool JavaClass::ParseClassBootstrapMethodsAttribute()
 				}
 
 				pBootstrapMethods_attribute_->bootstrap_methods_[m] = method;
-				std::cout << "bootstrap method ref = " << method->bootstrap_method_ref << std::endl;				
+				if (g_debug) {
+					std::cout << "bootstrap method ref = " << method->bootstrap_method_ref << std::endl;
+				}
 			}
 			return true;
 		}
@@ -204,7 +215,7 @@ bool JavaClass::ParseInnerClasses()
 //TODO: Cache the findings here
 bool JavaClass::ParseMethods(char *&p)
 {
-	methods.reserve(methods_count);
+	methods.resize(methods_count);
 
 	for (int i = 0; i < methods_count; i++)
 	{
@@ -276,7 +287,7 @@ bool JavaClass::ParseConstantPool(char *&p)
 
 bool JavaClass::ParseFields(char *&p)
 {
-	fields.reserve(fields_count);
+	fields.resize(fields_count);
 
 	for (int i = 0; i < fields_count; i++)
 	{
@@ -312,7 +323,7 @@ bool JavaClass::ParseFields(char *&p)
 
 bool JavaClass::ParseInterfaces(char *&p)
 {
-	interfaces.reserve(interfaces_count);
+	interfaces.resize(interfaces_count);
 
 	for (int i = 0; i < interfaces_count; i++)
 	{
@@ -384,6 +395,7 @@ bool JavaClass::GetConstantPool(u2 nIndex, cp_info &const_pool)
 	//int nLen=GetConstantPoolSize(cpool);
 
 	const_pool.tag = cpool[0];
+	const_pool.info = nullptr;
 	cpool++;
 	if (CONSTANT_Utf8 == const_pool.tag)
 	{
@@ -399,7 +411,7 @@ bool JavaClass::GetConstantPool(u2 nIndex, cp_info &const_pool)
 		memcpy(const_pool.info, cpool, 2);
 	}
 
-	return 0;
+	return true;
 }
 
 bool JavaClass::GetStringFromConstPool(int nIndex, std::string &strValue)
@@ -450,7 +462,7 @@ std::string JavaClass::GetSuperClassName(void)
 
 bool JavaClass::ParseMethodCodeAttribute(int nMethodIndex, Code_attribute *pCode_attr)
 {
-	if (nMethodIndex > methods_count)
+	if (nMethodIndex >= methods_count)
 	{
 		return false;
 	}
@@ -527,7 +539,7 @@ bool JavaClass::ParseMethodCodeAttribute(int nMethodIndex, Code_attribute *pCode
 		}
 	}
 
-	return 0;
+	return true;
 }
 
 int JavaClass::GetMethodIndex(std::string strMethodName, std::string strMethodDesc, JavaClass *&pClass)
@@ -643,7 +655,9 @@ bool JavaClass::CreateObject(u2 index, ObjectHeap *pObjectHeap, Object &object)
 	if (!this->GetStringFromConstPool(name_index, strClassName))
 		return false;
 
-	printf("Creating new object of class [%s]\n", strClassName.c_str());
+	if (g_debug) {
+		printf("Creating new object of class [%s]\n", strClassName.c_str());
+	}
 
 	JavaClass *pNewClass = this->m_pClassHeap->GetClass(strClassName);
 	if (pNewClass == NULL)
